@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Chicago Crime Explorer</title>
+
+    <!-- Tangle Core -->
+    <script src="Tangle.js"></script>
+
+    <!-- TangleKit -->
+    <link rel="stylesheet" href="TangleKit/TangleKit.css">
+    <script src="TangleKit/TangleKit.js"></script>
+
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 40px;
+        }
+        #heatmap {
+            width: 600px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>Chicago Crime Explorer</h1>
+
+<div id="controls">
+
+    <p>
+        Crime Group:
+        <span data-var="crimeGroup"
+              data-options="crimeGroupOptions"
+              class="TKSelect"></span>
+    </p>
+
+    <p>
+        Location Group:
+        <span data-var="locationGroup"
+              data-options="locationGroupOptions"
+              class="TKSelect"></span>
+    </p>
+
+    <p>
+        Year:
+        <span data-var="year"
+              class="TKSlider"
+              data-min="2001"
+              data-max="2024"></span>
+    </p>
+
+</div>
+
+<img id="heatmap" data-var="heatmapSrc" alt="Heatmap will appear here">
+
+<!-- Your app logic (load this LAST) -->
+<script src="app.js"></script>
+
+</body>
+</html>
