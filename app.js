@@ -4,13 +4,13 @@ var myAppData = {
         "Drug_Vice",
         "Other",
         "Property",
-        "Public Order",
+        "Public_Order",
         "Violent",
-        "White Collar"
+        "White_Collar"
     ],
 
     locationGroupOptions: [
-        "Commercial Retail",
+        "Commercial_Retail",
         "Entertainment",
         "Government_Institutional",
         "Industrial_Warehouse",
@@ -27,13 +27,17 @@ var myAppData = {
     locationGroup: "Residential",
     year: 2001,
 
-    // ⭐ REQUIRED: initialize the reactive image variable
+    // REQUIRED: initialize the reactive image variable
     heatmapSrc: ""
 };
 
-// --- THIS IS THE KEY CHANGE ---
 // Create a TangleModel instance for your data
 var myTangleModel = new TangleModel(myAppData);
+var filename =
+    "heatmaps/" +
+    cg + "_" +
+    lg + "_" +
+    yr + ".png";
 
 // Add an observer to update heatmapSrc whenever model values change
 myTangleModel.addObserver(function() {
@@ -51,7 +55,6 @@ var initialFilename =
     myTangleModel.get("locationGroup") + "_" +
     myTangleModel.get("year") + ".png";
 myTangleModel.set("heatmapSrc", "heatmaps/" + initialFilename);
-
 
 window.onload = function () {
     // Initialize Tangle on the specific #controls div
