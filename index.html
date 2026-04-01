@@ -30,14 +30,14 @@
         Crime Group:
         <span data-var="crimeGroup"
               data-class="TKSelect"
-              data-options="Drug/Vice, Other, Property, Public Order, Violent, White Collar"></span>
+              data-options="Drug_Vice, Other, Property, Public_Order, Violent, White_Collar"></span>
     </p>
 
     <p>
         Location Group:
         <span data-var="locationGroup"
               data-class="TKSelect"
-              data-options="Commercial Retail, Entertainment, Government/Institutional, Industrial/Warehouse, Other/Unknown, Parks/Outdoor, Residential, School/Childcare, Street/Sidewalk, Transit/Vehicle"></span>
+              data-options="Commercial_Retail, Entertainment, Government_Institutional, Industrial_Warehouse, Other_Unknown, Parks_Outdoor, Residential, School_Childcare, Street_Sidewalk, Transit_Vehicle"></span>
     </p>
 
     <p>
@@ -76,7 +76,7 @@ model.addObserver(function () {
     var lg = model.get("locationGroup").replace(/\s+/g, "_");
     var yr = model.get("year");
 
-    var filename = "heatmaps/" + cg + "-" + lg + "-" + yr + ".png";
+    var filename = "heatmaps/" + cg + "_" + lg + "_" + yr + ".png";
     document.getElementById("heatmap").src = filename;
 });
 </script>
