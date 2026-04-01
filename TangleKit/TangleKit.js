@@ -1,296 +1,316 @@
-//
-//  TangleKit.js
-//  Tangle 0.1.0
-//
-//  Created by Bret Victor on 6/10/11.
-//  (c) 2011 Bret Victor.  MIT open-source license.
-//
+/* ============================================================
+   TANGLE CORE
+   ============================================================ */
 
+var Tangle = function (element, model) {
+    this.element = element;
+    this.model = model;
+    this.bindings = [];
 
-(function () {
+    this.initialize();
+};
 
-
-//----------------------------------------------------------
-//
-//  TKIf
-//
-//  Shows the element if value is true (non-zero), hides if false.
-//
-//  Attributes:  data-invert (optional):  show if false instead.
-
-Tangle.classes.TKIf = {
-    
-    initialize: function (element, options, tangle, variable) {
-        this.isInverted = !!options.invert;
+Tangle.prototype = {
+    initialize: function () {
+        var elements = this.element.querySelectorAll("[data-var]");
+        for (var i = 0; i < elements.length; i++) {
+            this.initializeElement(elements[i]);
+        }
     },
-    
-    update: function (element, value) {
-        if (this.isInverted) { value = !value; }
-        if (value) { element.style.removeProperty("display"); } 
-        else { element.style.display = "none" };
+
+    initializeElement: function (element) {
+        var variable = element.getAttribute("data-var");
+        var value = this.model.get(variable);
+
+        var className = element.getAttribute("data-class");
+        if (className && Tangle.classes[className]) {
+            Tangle.classes[className].initialize(element, this.model, value, this.getOptions(element));
+        } else {
+            element.textContent = value;
+        }
+
+        this.bindings.push({ element: element, variable: variable });
+    },
+
+    getOptions: function (element) {
+        var options = {};
+        var attrs = element.attributes;
+        for (var i = 0; i < attrs.length; i++) {
+            var name = attrs[i].name;
+            if (name.indexOf("data-") === 0 && name !== "data-var" && name !== "data-class") {
+                var key = name.substring(5);
+                options[key] = this.parseValue(attrs[i].value);
+            }
+        }
+        return options;
+    },
+
+    parseValue: function (value) {
+        if (value === "true") return true;
+        if (value === "false") return false;
+        if (!isNaN(value)) return Number(value);
+        return value;
+    }
+};
+
+Tangle.classes = {};
+
+
+/* ============================================================
+   MODEL
+   ============================================================ */
+
+var TangleModel = function (values) {
+    this.values = values || {};
+    this.observers = [];
+};
+
+TangleModel.prototype = {
+    get: function (name) {
+        return this.values[name];
+    },
+
+    set: function (name, value) {
+        this.values[name] = value;
+        this.notifyObservers();
+    },
+
+    addObserver: function (fn) {
+        this.observers.push(fn);
+    },
+
+    notifyObservers: function () {
+        for (var i = 0; i < this.observers.length; i++) {
+            this.observers[i]();
+        }
     }
 };
 
 
-//----------------------------------------------------------
-//
-//  TKSwitch
-//
-//  Shows the element's nth child if value is n.
-//
-//  False or true values will show the first or second child respectively.
+/* ============================================================
+   TANGLEKIT — TKNumber
+   ============================================================ */
 
-Tangle.classes.TKSwitch = {
+var TKNumber = {
+    initialize: function (element, model, value, options) {
+        var variable = element.getAttribute("data-var");
 
-    update: function (element, value) {
-        element.getChildren().each( function (child, index) {
-            if (index != value) { child.style.display = "none"; } 
-            else { child.style.removeProperty("display"); }
+        model.addObserver(function () {
+            element.textContent = model.get(variable);
+        });
+
+        element.textContent = value;
+    }
+};
+
+Tangle.classes.TKNumber = TKNumber;
+
+
+/* ============================================================
+   TANGLEKIT — TKSelect
+   ============================================================ */
+
+var TKSelect = {
+    initialize: function (element, model, value, options) {
+        var variable = element.getAttribute("data-var");
+
+        var select = document.createElement("select");
+        element.appendChild(select);
+
+        var opts = options.options ? options.options.split(",") : [];
+
+        for (var i = 0; i < opts.length; i++) {
+            var opt = document.createElement("option");
+            opt.value = opts[i];
+            opt.textContent = opts[i];
+            select.appendChild(opt);
+        }
+
+        select.value = value;
+
+        select.addEventListener("change", function () {
+            model.set(variable, this.value);
+        });
+
+        model.addObserver(function () {
+            var newValue = model.get(variable);
+            if (select.value !== newValue) {
+                select.value = newValue;
+            }
         });
     }
 };
 
-
-//----------------------------------------------------------
-//
-//  TKSwitchPositiveNegative
-//
-//  Shows the element's first child if value is positive or zero.
-//  Shows the element's second child if value is negative.
-
-Tangle.classes.TKSwitchPositiveNegative = {
-
-    update: function (element, value) {
-        Tangle.classes.TKSwitch.update(element, value < 0);
-    }
-};
+Tangle.classes.TKSelect = TKSelect;
 
 
-//----------------------------------------------------------
-//
-//  TKToggle
-//
-//  Click to toggle value between 0 and 1.
+/* ============================================================
+   TANGLEKIT — TKSlider
+   ============================================================ */
 
-Tangle.classes.TKToggle = {
+var TKSlider = {
+    initialize: function (element, model, value, options) {
+        var variable = element.getAttribute("data-var");
 
-    initialize: function (element, options, tangle, variable) {
-        element.addEvent("click", function (event) {
-            var isActive = tangle.getValue(variable);
-            tangle.setValue(variable, isActive ? 0 : 1);
+        var slider = document.createElement("input");
+        slider.type = "range";
+
+        slider.min = options.min;
+        slider.max = options.max;
+        slider.step = options.step || 1;
+        slider.value = value;
+
+        element.appendChild(slider);
+
+        slider.addEventListener("input", function () {
+            model.set(variable, Number(this.value));
+        });
+
+        model.addObserver(function () {
+            var newValue = model.get(variable);
+            if (String(newValue) !== slider.value) {
+                slider.value = newValue;
+            }
         });
     }
 };
 
-
-//----------------------------------------------------------
-//
-//  TKNumberField
-//
-//  An input box where a number can be typed in.
-//
-//  Attributes:  data-size (optional): width of the box in characters
-
-Tangle.classes.TKNumberField = {
-
-    initialize: function (element, options, tangle, variable) {
-        this.input = new Element("input", {
-    		type: "text",
-    		"class":"TKNumberFieldInput",
-    		size: options.size || 6
-        }).inject(element, "top");
-        
-        var inputChanged = (function () {
-            var value = this.getValue();
-            tangle.setValue(variable, value);
-        }).bind(this);
-        
-        this.input.addEvent("keyup",  inputChanged);
-        this.input.addEvent("blur",   inputChanged);
-        this.input.addEvent("change", inputChanged);
-	},
-	
-	getValue: function () {
-        var value = parseFloat(this.input.get("value"));
-        return isNaN(value) ? 0 : value;
-	},
-	
-	update: function (element, value) {
-	    var currentValue = this.getValue();
-	    if (value !== currentValue) { this.input.set("value", "" + value); }
-	}
-};
+Tangle.classes.TKSlider = TKSlider;
 
 
-//----------------------------------------------------------
-//
-//  TKAdjustableNumber
-//
-//  Drag a number to adjust.
-//
-//  Attributes:  data-min (optional): minimum value
-//               data-max (optional): maximum value
-//               data-step (optional): granularity of adjustment (can be fractional)
+/* ============================================================
+   TANGLEKIT — TKToggle
+   ============================================================ */
 
-var isAnyAdjustableNumberDragging = false;  // hack for dragging one value over another one
+var TKToggle = {
+    initialize: function (element, model, value) {
+        var variable = element.getAttribute("data-var");
 
-Tangle.classes.TKAdjustableNumber = {
+        element.addEventListener("click", function () {
+            model.set(variable, !model.get(variable));
+        });
 
-    initialize: function (element, options, tangle, variable) {
-        this.element = element;
-        this.tangle = tangle;
-        this.variable = variable;
+        model.addObserver(function () {
+            element.textContent = model.get(variable) ? "On" : "Off";
+        });
 
-        this.min = (options.min !== undefined) ? parseFloat(options.min) : 0;
-        this.max = (options.max !== undefined) ? parseFloat(options.max) : 1e100;
-        this.step = (options.step !== undefined) ? parseFloat(options.step) : 1;
-        
-        this.initializeHover();
-        this.initializeHelp();
-        this.initializeDrag();
-    },
-
-
-    // hover
-    
-    initializeHover: function () {
-        this.isHovering = false;
-        this.element.addEvent("mouseenter", (function () { this.isHovering = true;  this.updateRolloverEffects(); }).bind(this));
-        this.element.addEvent("mouseleave", (function () { this.isHovering = false; this.updateRolloverEffects(); }).bind(this));
-    },
-    
-    updateRolloverEffects: function () {
-        this.updateStyle();
-        this.updateCursor();
-        this.updateHelp();
-    },
-    
-    isActive: function () {
-        return this.isDragging || (this.isHovering && !isAnyAdjustableNumberDragging);
-    },
-
-    updateStyle: function () {
-        if (this.isDragging) { this.element.addClass("TKAdjustableNumberDown"); }
-        else { this.element.removeClass("TKAdjustableNumberDown"); }
-        
-        if (!this.isDragging && this.isActive()) { this.element.addClass("TKAdjustableNumberHover"); }
-        else { this.element.removeClass("TKAdjustableNumberHover"); }
-    },
-
-    updateCursor: function () {
-        var body = document.getElement("body");
-        if (this.isActive()) { body.addClass("TKCursorDragHorizontal"); }
-        else { body.removeClass("TKCursorDragHorizontal"); }
-    },
-
-
-    // help
-
-    initializeHelp: function () {
-        this.helpElement = (new Element("div", { "class": "TKAdjustableNumberHelp" })).inject(this.element, "top");
-        this.helpElement.setStyle("display", "none");
-        this.helpElement.set("text", "drag");
-    },
-    
-    updateHelp: function () {
-        var size = this.element.getSize();
-        var top = -size.y + 7;
-        var left = Math.round(0.5 * (size.x - 20));
-        var display = (this.isHovering && !isAnyAdjustableNumberDragging) ? "block" : "none";
-        this.helpElement.setStyles({ left:left, top:top, display:display });
-    },
-
-
-    // drag
-    
-    initializeDrag: function () {
-        this.isDragging = false;
-        new BVTouchable(this.element, this);
-    },
-    
-    touchDidGoDown: function (touches) {
-        this.valueAtMouseDown = this.tangle.getValue(this.variable);
-        this.isDragging = true;
-        isAnyAdjustableNumberDragging = true;
-        this.updateRolloverEffects();
-        this.updateStyle();
-    },
-    
-    touchDidMove: function (touches) {
-        var value = this.valueAtMouseDown + touches.translation.x / 5 * this.step;
-        value = ((value / this.step).round() * this.step).limit(this.min, this.max);
-        this.tangle.setValue(this.variable, value);
-        this.updateHelp();
-    },
-    
-    touchDidGoUp: function (touches) {
-        this.isDragging = false;
-        isAnyAdjustableNumberDragging = false;
-        this.updateRolloverEffects();
-        this.updateStyle();
-        this.helpElement.setStyle("display", touches.wasTap ? "block" : "none");
+        element.textContent = value ? "On" : "Off";
     }
 };
 
+Tangle.classes.TKToggle = TKToggle;
 
 
+/* ============================================================
+   TANGLEKIT — TKFader
+   ============================================================ */
 
-//----------------------------------------------------------
-//
-//  formats
-//
-//  Most of these are left over from older versions of Tangle,
-//  before parameters and printf were available.  They should
-//  be redesigned.
-//
+var TKFader = {
+    initialize: function (element, model, value, options) {
+        var variable = element.getAttribute("data-var");
 
-function formatValueWithPrecision (value,precision) {
-    if (Math.abs(value) >= 100) { precision--; }
-    if (Math.abs(value) >= 10) { precision--; }
-    return "" + value.round(Math.max(precision,0));
-}
+        var input = document.createElement("input");
+        input.type = "range";
+        input.min = options.min;
+        input.max = options.max;
+        input.step = options.step || 1;
+        input.value = value;
 
-Tangle.formats.p3 = function (value) {
-    return formatValueWithPrecision(value,3);
+        element.appendChild(input);
+
+        input.addEventListener("input", function () {
+            model.set(variable, Number(this.value));
+        });
+
+        model.addObserver(function () {
+            input.value = model.get(variable);
+        });
+    }
 };
 
-Tangle.formats.neg_p3 = function (value) {
-    return formatValueWithPrecision(-value,3);
+Tangle.classes.TKFader = TKFader;
+
+
+/* ============================================================
+   TANGLEKIT — TKFormat
+   ============================================================ */
+
+var TKFormat = {
+    initialize: function (element, model, value, options) {
+        var variable = element.getAttribute("data-var");
+
+        model.addObserver(function () {
+            var v = model.get(variable);
+            element.textContent = TKFormat.format(v, options);
+        });
+
+        element.textContent = TKFormat.format(value, options);
+    },
+
+    format: function (value, options) {
+        if (options.prefix) value = options.prefix + value;
+        if (options.suffix) value = value + options.suffix;
+        return value;
+    }
 };
 
-Tangle.formats.p2 = function (value) {
-    return formatValueWithPrecision(value,2);
+Tangle.classes.TKFormat = TKFormat;
+
+
+/* ============================================================
+   TANGLEKIT — TKLog
+   ============================================================ */
+
+var TKLog = {
+    initialize: function (element, model, value, options) {
+        var variable = element.getAttribute("data-var");
+
+        model.addObserver(function () {
+            console.log(variable + " =", model.get(variable));
+        });
+    }
 };
 
-Tangle.formats.e6 = function (value) {
-    return "" + (value * 1e-6).round();
+Tangle.classes.TKLog = TKLog;
+
+
+/* ============================================================
+   TANGLEKIT — TKIf
+   ============================================================ */
+
+var TKIf = {
+    initialize: function (element, model, value, options) {
+        var variable = element.getAttribute("data-var");
+
+        model.addObserver(function () {
+            element.style.display = model.get(variable) ? "" : "none";
+        });
+
+        element.style.display = value ? "" : "none";
+    }
 };
 
-Tangle.formats.abs_e6 = function (value) {
-    return "" + (Math.abs(value) * 1e-6).round();
+Tangle.classes.TKIf = TKIf;
+
+
+/* ============================================================
+   TANGLEKIT — TKSwitch
+   ============================================================ */
+
+var TKSwitch = {
+    initialize: function (element, model, value, options) {
+        var variable = element.getAttribute("data-var");
+
+        model.addObserver(function () {
+            var v = model.get(variable);
+            var children = element.children;
+
+            for (var i = 0; i < children.length; i++) {
+                var match = children[i].getAttribute("data-case");
+                children[i].style.display = (match === v) ? "" : "none";
+            }
+        });
+    }
 };
 
-Tangle.formats.freq = function (value) {
-    if (value < 100) { return "" + value.round(1) + " Hz"; }
-    if (value < 1000) { return "" + value.round(0) + " Hz"; }
-    return "" + (value / 1000).round(2) + " KHz"; 
-};
-
-Tangle.formats.dollars = function (value) {
-    return "$" + value.round(0);
-};
-
-Tangle.formats.free = function (value) {
-    return value ? ("$" + value.round(0)) : "free";
-};
-
-Tangle.formats.percent = function (value) {
-    return "" + (100 * value).round(0) + "%";
-};
-
-
-    
-//----------------------------------------------------------
-
-})();
-
+Tangle.classes.TKSwitch = TKSwitch;
