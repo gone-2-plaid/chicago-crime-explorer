@@ -4,13 +4,6 @@
     <meta charset="UTF-8">
     <title>Chicago Crime Explorer</title>
 
-    <!-- Tangle Core -->
-    <script src="https://gone-2-plaid.github.io/chicago-crime-explorer/Tangle.js"></script>
-
-    <!-- TangleKit -->
-    <link rel="stylesheet" href="https://gone-2-plaid.github.io/chicago-crime-explorer/TangleKit/TangleKit.css">
-    <script src="https://gone-2-plaid.github.io/chicago-crime-explorer/TangleKit/TangleKit.js"></script>
-
     <style>
         body {
             font-family: sans-serif;
@@ -21,6 +14,9 @@
             border: 1px solid #ccc;
             margin-top: 20px;
         }
+        #controls p {
+            margin: 10px 0;
+        }
     </style>
 </head>
 
@@ -30,34 +26,60 @@
 
 <div id="controls">
 
-<p>
-    Crime Group:
-    <span data-var="crimeGroup"
-          data-options="Drug_Vice,Other,Property,Public Order,Violent,White Collar"
-          class="TKSelect"></span>
-</p>
+    <p>
+        Crime Group:
+        <span data-var="crimeGroup"
+              data-class="TKSelect"
+              data-options="Drug/Vice, Other, Property, Public Order, Violent, White Collar"></span>
+    </p>
 
-<p>
-    Location Group:
-    <span data-var="locationGroup"
-          data-options="Commercial Retail,Entertainment,Government_Institutional,Industrial_Warehouse,Other_Unknown,Parks_Outdoor,Residential,School_Childcare,Street_Sidewalk,Transit_Vehicle"
-          class="TKSelect"></span>
-</p>
+    <p>
+        Location Group:
+        <span data-var="locationGroup"
+              data-class="TKSelect"
+              data-options="Commercial Retail, Entertainment, Government/Institutional, Industrial/Warehouse, Other/Unknown, Parks/Outdoor, Residential, School/Childcare, Street/Sidewalk, Transit/Vehicle"></span>
+    </p>
 
-<p>
-    Year:
-    <span data-var="year"
-          data-min="2001"
-          data-max="2024"
-          class="TKSlider"></span>
-</p>
+    <p>
+        Year:
+        <span data-var="year"
+              data-class="TKSlider"
+              data-min="2001"
+              data-max="2024"
+              data-step="1"></span>
+    </p>
 
 </div>
 
-<img id="heatmap" data-var="heatmapSrc" alt="Heatmap will appear here">
+<img id="heatmap" src="" alt="Heatmap will appear here">
 
-<!-- Your app logic (load this LAST) -->
+<!-- Load your bundled Tangle + TangleKit -->
+<script src="tangle-bundle.js"></script>
+
+<!-- Your app logic -->
 <script src="app.js"></script>
+
+<script>
+// Initialize Tangle model
+var model = new TangleModel({
+    crimeGroup: "Drug/Vice",
+    locationGroup: "Residential",
+    year: 2001
+});
+
+// Attach Tangle to the page
+var tangle = new Tangle(document.body, model);
+
+// Update heatmap image whenever variables change
+model.addObserver(function () {
+    var cg = model.get("crimeGroup").replace(/\s+/g, "_");
+    var lg = model.get("locationGroup").replace(/\s+/g, "_");
+    var yr = model.get("year");
+
+    var filename = "heatmaps/" + cg + "-" + lg + "-" + yr + ".png";
+    document.getElementById("heatmap").src = filename;
+});
+</script>
 
 </body>
 </html>
