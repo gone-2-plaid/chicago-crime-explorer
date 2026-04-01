@@ -24,12 +24,7 @@ Tangle.prototype = {
 
         var className = element.getAttribute("data-class");
         if (className && Tangle.classes[className]) {
-            Tangle.classes[className].initialize(
-                element,
-                this.model,
-                value,
-                this.getOptions(element)
-            );
+            Tangle.classes[className].initialize(element, this.model, value, this.getOptions(element));
         } else {
             element.textContent = value;
         }
@@ -42,9 +37,7 @@ Tangle.prototype = {
         var attrs = element.attributes;
         for (var i = 0; i < attrs.length; i++) {
             var name = attrs[i].name;
-            if (name.indexOf("data-") === 0 &&
-                name !== "data-var" &&
-                name !== "data-class") {
+            if (name.indexOf("data-") === 0 && name !== "data-var" && name !== "data-class") {
                 var key = name.substring(5);
                 options[key] = this.parseValue(attrs[i].value);
             }
@@ -321,3 +314,11 @@ var TKSwitch = {
 };
 
 Tangle.classes.TKSwitch = TKSwitch;
+
+var myModel = new TangleModel({
+    crimeGroup: 'Drug_Vice',
+    locationGroup: 'Residential',
+    year: 2001
+});
+
+var tangle = new Tangle(document.getElementById('controls'), myModel);

@@ -30,14 +30,14 @@
         Crime Group:
         <span data-var="crimeGroup"
               data-class="TKSelect"
-              data-options="Drug_Vice, Other, Property, Public_Order, Violent, White_Collar"></span>
+              data-options="Drug/Vice, Other, Property, Public Order, Violent, White Collar"></span>
     </p>
 
     <p>
         Location Group:
         <span data-var="locationGroup"
               data-class="TKSelect"
-              data-options="Commercial_Retail, Entertainment, Government_Institutional, Industrial_Warehouse, Other_Unknown, Parks_Outdoor, Residential, School_Childcare, Street_Sidewalk, Transit_Vehicle"></span>
+              data-options="Commercial Retail, Entertainment, Government/Institutional, Industrial/Warehouse, Other/Unknown, Parks/Outdoor, Residential, School/Childcare, Street/Sidewalk, Transit/Vehicle"></span>
     </p>
 
     <p>
@@ -53,11 +53,33 @@
 
 <img id="heatmap" src="" alt="Heatmap will appear here">
 
-<!-- Load your Tangle core + widgets -->
-<script src="TangleKit.js"></script>
+<!-- Load your bundled Tangle + TangleKit -->
+<script src="tangle-bundle.js"></script>
 
-<!-- Your app logic (model, observers, filename updates) -->
+<!-- Your app logic -->
 <script src="app.js"></script>
+
+<script>
+// Initialize Tangle model
+var model = new TangleModel({
+    crimeGroup: "Drug/Vice",
+    locationGroup: "Residential",
+    year: 2001
+});
+
+// Attach Tangle to the page
+var tangle = new Tangle(document.body, model);
+
+// Update heatmap image whenever variables change
+model.addObserver(function () {
+    var cg = model.get("crimeGroup").replace(/\s+/g, "_");
+    var lg = model.get("locationGroup").replace(/\s+/g, "_");
+    var yr = model.get("year");
+
+    var filename = "heatmaps/" + cg + "-" + lg + "-" + yr + ".png";
+    document.getElementById("heatmap").src = filename;
+});
+</script>
 
 </body>
 </html>
