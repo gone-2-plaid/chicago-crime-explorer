@@ -27,45 +27,36 @@ var myAppData = {
     locationGroup: "Residential",
     year: 2001,
 
-    // REQUIRED: initialize the reactive image variable
+    // Reactive image variable
     heatmapSrc: ""
 };
 
-// Create a TangleModel instance for your data
+// Create a TangleModel instance
 var myTangleModel = new TangleModel(myAppData);
-var filename =
-    "heatmaps/" +
-    cg + "_" +
-    lg + "_" +
-    yr + ".png";
 
-// Add an observer to update heatmapSrc whenever model values change
-myTangleModel.addObserver(function() {
+// Update heatmapSrc whenever model values change
+myTangleModel.addObserver(function () {
     var filename =
         myTangleModel.get("crimeGroup") + "_" +
         myTangleModel.get("locationGroup") + "_" +
         myTangleModel.get("year") + ".png";
+
     myTangleModel.set("heatmapSrc", "heatmaps/" + filename);
+
+    // Update the image element
+    document.getElementById('heatmap').src = myTangleModel.get("heatmapSrc");
 });
 
-// Initialize the heatmapSrc for the first time
-// This needs to be done *after* the model is set up and the observer is added
+// Initialize the heatmapSrc once
 var initialFilename =
     myTangleModel.get("crimeGroup") + "_" +
     myTangleModel.get("locationGroup") + "_" +
     myTangleModel.get("year") + ".png";
+
 myTangleModel.set("heatmapSrc", "heatmaps/" + initialFilename);
 
+// Initialize Tangle on page load
 window.onload = function () {
-    // Initialize Tangle on the specific #controls div
-    // And pass your TangleModel instance
     new Tangle(document.getElementById('controls'), myTangleModel);
-
-    // Also, ensure the img#heatmap has a data-class if you want Tangle to manage its src
-    // However, the current Tangle core does not have a TKImg or similar class to set src
-    // So, we will manually set it via the TangleModel observer.
-    // If you add a Tangle.classes.TKImage, then you could change img#heatmap to:
-    // <img id="heatmap" data-var="heatmapSrc" data-class="TKImage" alt="Heatmap will appear here">
-    // For now, the observer approach is robust.
     document.getElementById('heatmap').src = myTangleModel.get("heatmapSrc");
 };
