@@ -314,3 +314,11 @@ var TKSwitch = {
 };
 
 Tangle.classes.TKSwitch = TKSwitch;
+
+var myModel = new TangleModel({
+    crimeGroup: 'Drug_Vice',
+    locationGroup: 'Residential',
+    year: 2001
+});
+
+var tangle = new Tangle(document.getElementById('controls'), myModel);
