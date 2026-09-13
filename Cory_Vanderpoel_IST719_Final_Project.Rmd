@@ -1,0 +1,739 @@
+---
+title: "IST719 Final Project"
+author: "Cory Vanderpoel"
+date: "2026-02-15"
+output: pdf_document
+---
+
+Patterns in Chicago Crime: A Multi‑Dimensional Exploration
+
+
+About the data:
+• Dataset description of two sentences.
+This dataset contains individual crime incident records reported to the Chicago Police Department from January 2001 onward. Each row represents a single reported crime including its classification, location coordinates, whether an arrest was made, whether it was a domestic incident, and the police beat and district. The data supports crime prediction, hotspot analysis, temporal pattern detection, and public safety research.
+Columns:
+  id                       : Unique record identifier
+  case_number              : Chicago Police Department case number
+  date                     : Date and time of incident occurrence
+  block                    : Partially redacted street address
+  iucr                     : Illinois Uniform Crime Reporting code
+  primary_type             : Primary crime classification (e.g., THEFT, BATTERY, ASSAULT)
+  description              : Detailed crime description
+  location_description     : Type of location (e.g., STREET, APARTMENT, SIDEWALK) #Explore this
+  arrest                   : Whether an arrest was made (true/false)
+  domestic                 : Whether the incident was domestic-related (true/false)
+  beat                     : Police beat where incident occurred
+  district                 : Police district number
+  ward                     : City council ward number
+  community_area           : Community area code
+  year                     : Year of incident
+  latitude                 : Latitude coordinate of incident
+  longitude                : Longitude coordinate of incident
+  updated_on               : Date record was last updated
+
+• My compelling story of two sentences.
+This poster examines spatial, temporal, and categorical patterns in Chicago crime to reveal how incidents cluster and evolve across the city. By integrating multiple dimensions of the data, the analysis highlights trends that are relevant for understanding and modeling urban risk. 
+
+• My audience (who would care about it) of two sentences.
+Insurance companies rely on accurate risk assessment to set premiums, evaluate claims exposure, and understand neighborhood‑level trends. Crime patterns—especially when examined across time, location, and type—offer valuable insight into potential losses and risk concentration. This motivates a deeper exploration of how different dimensions of Chicago crime interact.
+
+Questions I plan to answer
+- How do crime rates vary across Chicago neighborhoods when considering both crime type and time of year?
+- Which types of crime are most strongly associated with specific geographic areas, and how might these patterns influence risk exposure?
+- Is arrest likelihood related to the combination of crime type and location, and what might this imply for claims predictability?
+
+
+```{r}
+#Libraries
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(hexbin)
+library(ggmap)
+library(RColorBrewer)
+library(wordcloud)
+library(tidytext)
+library(tidyverse)
+library(sf)
+library(MetBrewer)
+library(svglite)
+
+#Standard Color Pallette for a clean poster
+pal <- met.brewer("Hiroshige")
+pal <- colorRampPalette(pal)(24)
+```
+
+
+Importing my data:
+```{r}
+crime.data <- read.csv("chicago crimes.csv"
+                       , header = TRUE
+                       , stringsAsFactors = FALSE
+                       )
+
+```
+
+Getting a quick look:
+```{r}
+head(crime.data)
+```
+
+```{r}
+#Data Cleanup
+crime.data$DateObject <- mdy_hms(crime.data$Date) #from string to date object
+
+crime_group_map <- c( #Re-mapping for my purposes
+  #Violent Crime
+  "BATTERY" = "Violent",
+  "ASSAULT" = "Violent",
+  "ROBBERY" = "Violent",
+  "HOMICIDE" = "Violent",
+  "CRIM SEXUAL ASSAULT" = "Violent",
+
+  #Property Crime
+  "THEFT" = "Property",
+  "BURGLARY" = "Property",
+  "MOTOR VEHICLE THEFT" = "Property",
+  "ARSON" = "Property",
+  "CRIMINAL DAMAGE" = "Property",
+
+  #Drug / Vice
+  "NARCOTICS" = "Drug/Vice",
+  "PROSTITUTION" = "Drug/Vice",
+  "GAMBLING" = "Drug/Vice",
+
+  #Public Order
+  "WEAPONS VIOLATION" = "Public Order",
+  "INTERFERENCE WITH PUBLIC OFFICER" = "Public Order",
+  "PUBLIC PEACE VIOLATION" = "Public Order",
+
+  #White Collar / Fraud
+  "DECEPTIVE PRACTICE" = "White Collar",
+  "FORGERY" = "White Collar",
+  "FRAUD" = "White Collar"
+)
+
+crime.data <- crime.data %>%
+  mutate(
+    Crime.Group = crime_group_map[Primary.Type],
+    Crime.Group = if_else(is.na(Crime.Group), "Other", Crime.Group)
+  )
+
+crime.data <- crime.data %>%
+  mutate(
+    Latitude = as.numeric(Latitude),
+    Longitude = as.numeric(Longitude)
+  )
+
+
+crime.data <- crime.data %>% #Mapping for my purposes - need to make this column less granular
+  mutate(
+    location.group = case_when(
+      str_detect(Location.Description, regex("APARTMENT|RESIDENCE|HOME|YARD|PORCH|DRIVEWAY", ignore_case = TRUE)) ~ "Residential",
+      str_detect(Location.Description, regex("STREET|SIDEWALK|ALLEY|PARKING LOT", ignore_case = TRUE)) ~ "Street/Sidewalk",
+      str_detect(Location.Description, regex("STORE|GAS STATION|RESTAURANT|SHOP|MARKET", ignore_case = TRUE)) ~ "Commercial Retail",
+      str_detect(Location.Description, regex("CTA|TRAIN|BUS|VEHICLE|TAXI|PLATFORM", ignore_case = TRUE)) ~ "Transit/Vehicle",
+      str_detect(Location.Description, regex("SCHOOL|COLLEGE|DAYCARE|UNIVERSITY", ignore_case = TRUE)) ~ "School/Childcare",
+      str_detect(Location.Description, regex("PARK|BEACH|PLAYGROUND|LAKEFRONT", ignore_case = TRUE)) ~ "Parks/Outdoor",
+      str_detect(Location.Description, regex("GOVERNMENT|POLICE|HOSPITAL|COURT", ignore_case = TRUE)) ~ "Government/Institutional",
+      str_detect(Location.Description, regex("FACTORY|WAREHOUSE|CONSTRUCTION", ignore_case = TRUE)) ~ "Industrial/Warehouse",
+      str_detect(Location.Description, regex("BAR|CLUB|THEATER|ARENA", ignore_case = TRUE)) ~ "Entertainment",
+      TRUE ~ "Other/Unknown"
+    )
+  )
+
+
+
+head(crime.data)
+```
+
+Descriptive Plots:
+```{r}
+crimeDistribution <- crime.data %>%
+  mutate(hour = hour(DateObject)) %>%
+  ggplot(aes(x = hour)) +
+  geom_histogram(binwidth = 1, fill = pal[3], color = "white") +
+  scale_x_continuous(
+    breaks = c(0, 6, 12, 18),
+    labels = format(strptime(c(0, 6, 12, 18), "%H"), "%I %p")
+  ) +
+  scale_y_continuous(labels = NULL) +
+  labs(
+    title = "Distribution of Crime by Hour",
+    x = "Hour of Day",
+    y = "Total Crime Volume"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(size = 10)
+  )
+
+ggsave(
+  "PlotsForPoster/crimeDistribution.pdf",
+  plot = last_plot(),
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+crimeDistribution
+```
+
+```{r}
+commonCrimes <- crime.data %>%
+  count(Primary.Type) %>%
+  slice_max(n, n = 15) %>%   #top 15 types
+  ggplot(aes(x = reorder(Primary.Type, n), y = n)) +
+  geom_col(fill = pal[8]) +
+  coord_flip() +
+  labs(
+    title = "Most Common Crime Types",
+    x = "Crime Type",
+    y = "Total Volume"
+  ) +
+  theme_minimal(base_size = 14)
+
+ggsave(
+  "PlotsForPoster/commonCrimes.pdf",
+  plot = last_plot(),
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+commonCrimes
+```
+
+```{r}
+monthlyCrimes <- crime.data %>%
+  mutate(month = month(DateObject, label = TRUE)) %>%
+  count(month) %>%
+  ggplot(aes(x = month, y = n)) +
+  geom_col(fill = pal[2]) +
+  labs(
+    title = "Crime Frequency by Month",
+    x = "Month",
+    y = "Number of Incidents"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  "PlotsForPoster/monthlyCrimes.pdf",
+  plot = last_plot(),
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+monthlyCrimes
+```
+
+```{r}
+arrestOutcomes <- crime.data %>%
+  mutate(Arrest = if_else(Arrest == "true", "Yes", "No")) %>% #Remapping for readability
+  count(Arrest) %>%
+  ggplot(aes(x = Arrest, y = n, fill = Arrest)) +
+  geom_col(show.legend = FALSE) +
+  scale_fill_manual(values = pal[c(1,4)]) +
+  labs(
+    title = "Arrest Outcomes",
+    x = "Arrest Made",
+    y = "Count"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+ggsave(
+  "PlotsForPoster/arrestOutcomes.pdf",
+  plot = last_plot(),
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+arrestOutcomes
+```
+
+
+Heatmap
+```{r}
+seasonalPatterns <- crime.data %>%
+  mutate(month = month(DateObject, label = TRUE)) %>%
+  count(Crime.Group, month) %>%
+  group_by(Crime.Group) %>%
+  mutate(pct = n / sum(n)) %>%   #normalize within type
+  ggplot(aes(x = month, y = fct_reorder(Crime.Group, pct, .fun = max), fill = pct)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(option = "C") +
+  labs(
+    title = "Seasonal Patterns in Crime Types ",
+    subtitle = "Normalized to highlight seasonal risk patterns",
+    x = "Month",
+    y = NULL,
+    fill = "Percent"
+  ) +
+  theme_minimal(base_size = 14)
+
+ggsave(
+  "PlotsForPoster/seasonalPatterns.pdf",
+  plot = seasonalPatterns,
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+seasonalPatterns
+```
+
+Density Maps
+```{r}
+chicago_map <- st_read("Neighborhoods_2012b_20260330.geojson")
+crime.clean <- crime.data %>%
+  filter(
+    between(Longitude, -87.94, -87.52),
+    between(Latitude, 41.64, 42.02)
+  )
+crime.clean <- crime.clean %>%
+  filter(Longitude != 0, Latitude != 0)
+
+crime.recent <- crime.clean %>% filter(Year >= 2020)
+
+
+```
+
+Overall Crime Density
+```{r}
+register_stadiamaps(key = "331001f0-0400-4b42-bd5a-0d7317b5595f")
+
+bbox <- c(
+  left   = -87.82,
+  bottom = 41.65,
+  right  = -87.55,
+  top    = 42.0
+)
+
+base <- get_stadiamap(
+  bbox = bbox,
+  zoom = 12,
+  maptype = "stamen_toner_lite"
+)
+
+overallDenisty <- ggmap(base) +
+  stat_density2d(
+    data = crime.recent,
+    aes(x = Longitude, y = Latitude, fill = after_stat(level), alpha = after_stat(level)),
+    geom = "polygon",
+    contour = TRUE
+  ) +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_alpha(range = c(0.2, 0.7), guide = "none") +
+  labs(
+    title = "Chicago Crime Density",
+    subtitle = "Overall Activity"
+  ) +
+  theme_void()
+
+ggsave(
+  "PlotsForPoster/overallDenisty.pdf",
+  plot = overallDenisty,
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+overallDenisty
+```
+
+```{r}
+arrestLikelyhood <- crime.data %>%
+  count(District, Crime.Group, Arrest) %>%
+  group_by(District, Crime.Group) %>%
+  mutate(pct_arrest = n / sum(n)) %>%
+  filter(Arrest == "true") %>%
+  ggplot(aes(x = Crime.Group, y = pct_arrest, fill = factor(District))) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  scale_fill_manual(values = pal) +
+  labs(
+    title = "Arrest Likelihood by Crime Type and District",
+    x = "Crime Type",
+    y = "Arrest Rate",
+    fill = "District"
+  ) +
+  theme_minimal(base_size = 14)
+
+ggsave(
+  "PlotsForPoster/arrestLikelyhood.pdf",
+  plot = arrestLikelyhood,
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+arrestLikelyhood
+```
+
+
+
+Violent Crimes
+```{r}
+violent.crime <- crime.recent %>%
+  filter(Crime.Group == "Violent")
+
+base <- get_stadiamap(
+  bbox = bbox,
+  zoom = 12,
+  maptype = "stamen_toner_lite"
+)
+
+violentCrimeMap <- ggmap(base) +
+  stat_density2d(
+    data = violent.crime,
+    aes(x = Longitude, y = Latitude, fill = after_stat(level), alpha = after_stat(level)),
+    geom = "polygon",
+    contour = TRUE
+  ) +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_alpha(range = c(0.2, 0.7), guide = "none") +
+  labs(
+    title = "Violent Crimes",
+    subtitle = " (2020-Present)"
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.margin = margin(0, 0, 0, 0)
+  )
+
+ggsave(
+  "PlotsForPoster/violentCrimes.pdf",
+  plot = violentCrimeMap,
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+violentCrimeMap
+```
+Property Crime
+```{r}
+property.crime <- crime.recent %>%
+  filter(Crime.Group == "Property")
+
+base <- get_stadiamap(
+  bbox = bbox,
+  zoom = 12,
+  maptype = "stamen_toner_lite"
+)
+
+propertyCrimes <- ggmap(base) +
+  stat_density2d(
+    data = property.crime,
+    aes(x = Longitude, y = Latitude, fill = after_stat(level), alpha = after_stat(level)),
+    geom = "polygon",
+    contour = TRUE
+  ) +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_alpha(range = c(0.2, 0.7), guide = "none") +
+  labs(
+    title = "Property Crimes",
+    subtitle = " (2020-Present)"
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.margin = margin(0, 0, 0, 0)
+  )
+
+
+ggsave(
+  "PlotsForPoster/propertyCrimes.pdf",
+  plot = propertyCrimes,
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+propertyCrimes
+```
+
+
+Drug/Vice Crime
+```{r}
+vice.crimes <- crime.recent %>%
+  filter(Crime.Group == "Drug/Vice")
+
+base <- get_stadiamap(
+  bbox = bbox,
+  zoom = 12,
+  maptype = "stamen_toner_lite"
+)
+
+viceCrimes <- ggmap(base) +
+  stat_density2d(
+    data = vice.crimes,
+    aes(x = Longitude, y = Latitude, fill = after_stat(level), alpha = after_stat(level)),
+    geom = "polygon",
+    contour = TRUE
+  ) +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_alpha(range = c(0.2, 0.7), guide = "none") +
+  labs(
+    title = "Drug/Vice Crimes",
+    subtitle = " (2020-Present)"
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.margin = margin(0, 0, 0, 0)
+  )
+
+ggsave(
+  "PlotsForPoster/viceCrimes.pdf",
+  plot = viceCrimes,
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+viceCrimes
+```
+
+All Other
+```{r}
+other.crimes <- crime.recent %>%
+  filter(!Crime.Group %in% c("Violent", "Property", "Drug/Vice"))
+
+base <- get_stadiamap(
+  bbox = bbox,
+  zoom = 12,
+  maptype = "stamen_toner_lite"
+)
+
+allOtherCrimes <- ggmap(base) +
+  stat_density2d(
+    data = other.crimes,
+    aes(x = Longitude, y = Latitude, fill = after_stat(level), alpha = after_stat(level)),
+    geom = "polygon",
+    contour = TRUE
+  ) +
+  scale_fill_viridis_c(option = "inferno") +
+  scale_alpha(range = c(0.2, 0.7), guide = "none") +
+  labs(
+    title = "All Other Crimes",
+    subtitle = " (2020-Present)"
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.margin = margin(0, 0, 0, 0)
+  )
+
+ggsave(
+  "PlotsForPoster/allOtherCrimes.pdf",
+  plot = allOtherCrimes,
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+allOtherCrimes
+```
+
+
+```{r}
+arrest.rates <- crime.data %>%
+  group_by(location.group, Crime.Group) %>%
+  summarise(
+    arrests = sum(Arrest == 'true', na.rm = TRUE),
+    total = n(),
+    arrest_rate = arrests / total,
+    .groups = "drop"
+  )
+
+arrestGroupings <- ggplot(arrest.rates, aes(x = location.group, y = arrest_rate, fill = Crime.Group)) +
+  geom_col(position = "stack", color = "white") +
+  scale_fill_viridis_d(option = "C") +
+  labs(
+    title = "Arrest Rate by Location Category",
+    x = "Location Category",
+    y = "Arrest Rate",
+    fill = "Crime Group"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  ) +
+  coord_flip()
+
+ggsave(
+  "PlotsForPoster/arrestGroupings.pdf",
+  plot = arrestGroupings,
+  width = 8,
+  height = 6,
+  device = cairo_pdf
+)
+
+arrestGroupings
+```
+
+
+```{r}
+library(tigris)
+options(tigris_use_cache = TRUE)
+
+#Chicago boundary
+chi <- places(state = "IL", cb = TRUE) %>%
+  filter(NAME == "Chicago") %>%
+  st_transform(26971)  #Illinois East NAD83
+
+#Neighborhoods (optional)
+hoods <- neighborhoods <- tracts(state = "IL", county = "Cook", cb = TRUE) %>%
+  st_transform(26971)
+
+plotBackground <- ggplot() +
+  geom_sf(data = chi, fill = "grey90", color = NA) +
+  geom_sf(data = hoods, fill = NA, color = "grey70", size = 0.2, alpha = 0.4) +
+  theme_void() +
+  theme(
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+ggsave("PlotsForPoster/chicago_basemap.svg", plot = plotBackground, width = 24, height = 36, device = svglite)
+
+```
+
+
+Tangle visualization demo
+```{r}
+options(tigris_use_cache = TRUE)
+
+#Chicago boundary
+chi <- places(state = "IL", cb = TRUE) %>%
+  filter(NAME == "Chicago") %>%
+  st_transform(4326)
+
+
+#Neighborhoods
+hoods <- tracts(state = "IL", county = "Cook", cb = TRUE) %>%
+  st_transform(4326)
+
+
+crime <- crime.clean
+
+#Ensure factors are consistent
+crime$Crime.Group <- factor(crime$Crime.Group)
+crime$location.group <- factor(crime$location.group)
+crime$DateObject <- as.POSIXct(crime$Date,
+                               format = "%m/%d/%Y %I:%M:%S %p",
+                               tz = "America/Chicago")
+crime$year <- year(crime$DateObject)
+
+crime.distint <- crime %>%
+  group_by(Crime.Group, location.group, year, Latitude,Longitude) %>%
+  summarize(n_points = n(), .groups = "drop")
+
+crime_dedup <- crime %>%
+  group_by(Crime.Group, location.group, year) %>%
+  distinct(Longitude, Latitude, .keep_all = TRUE) %>%
+  ungroup()
+
+output_dir <- "C:/Users/coryv/OneDrive/Documents/Master's Program - Syracuse University/07 - IST719/Homework/Final Project/TangleDemo/heatmaps"
+dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+bbox <- c(
+  left   = -87.94011,
+  bottom = 41.64454,
+  right  = -87.52398,
+  top    = 42.02304
+)
+
+#Get basemap (you can switch to "toner-lite" or others)
+chicago_map <- get_stadiamap(
+  bbox,
+  zoom = 11,
+  maptype = "stamen_toner_lite"
+)
+
+crime_groups <- levels(crime_dedup$Crime.Group)
+location_groups <- levels(crime_dedup$location.group)
+years <- sort(unique(crime_dedup$year))
+
+for (cg in crime_groups) {
+  for (lg in location_groups) {
+    for (yr in years) {
+
+      message("Rendering: ", cg, " / ", lg, " / ", yr)
+
+      #Filter data
+      df <- crime_dedup %>%
+        filter(Crime.Group == cg,
+               location.group == lg,
+               year == yr)
+
+      #Skip empty subsets
+      if (nrow(df) <= 10) next
+
+      p <- ggplot() +
+        
+        #Basemap from get_stadiamap()
+        annotation_raster(
+          chicago_map,
+          xmin = bbox["left"],
+          xmax = bbox["right"],
+          ymin = bbox["bottom"],
+          ymax = bbox["top"]
+        ) +
+        
+        #Chicago boundary
+        geom_sf(data = chi, fill = "grey90", color = NA) +
+        
+        #Neighborhood outlines
+        geom_sf(data = hoods, fill = NA, color = "grey70", size = 0.2, alpha = 0.4) +
+        
+        #Density heatmap
+        stat_density2d(
+          data = df,
+          aes(x = Longitude, y = Latitude, fill = ..level.., alpha = ..level..),
+          geom = "polygon",
+          contour = TRUE
+        ) +
+        
+        #Coordinate system + bounding box
+        coord_sf(
+          crs = 4326,
+          xlim = c(bbox["left"], bbox["right"]),
+          ylim = c(bbox["bottom"], bbox["top"])
+        ) +
+        
+        #Aesthetics
+        scale_fill_viridis_c(option = "magma") +
+        scale_alpha(range = c(0.2, 0.7), guide = FALSE) +
+        theme_void() +
+        theme(legend.position = "none")
+
+      safe_cg <- gsub("/", "_", cg)
+      safe_lg <- gsub("/", "_", lg)
+
+      filename <- file.path(output_dir, paste0(safe_cg, "_", safe_lg, "_", yr, ".png"))
+      
+      ggsave(
+        filename = filename,
+        plot = p,
+        width = 6,
+        height = 4,
+        dpi = 150
+      )
+    }
+  }
+}
+```
